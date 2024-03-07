@@ -3,13 +3,15 @@ WITH CommentRank AS (
         tc.ticket_id,
         tc.created AS comment_created,
         FORMAT(
-            'Ticket Comment %d\nCreated On: %s\nCreated By: %s (%s), Role: %s\n-------------------------\n%s\n-------------------------\n',
+            'Ticket Comment %d\nCreated On : %s\nCreated By : %s (%s), Role: %s\n%s\n%s\n%s\n',
             ROW_NUMBER() OVER(PARTITION BY tc.ticket_id ORDER BY tc.created),
-            CAST(tc.created AS STRING),
+            CAST(tc.created AS VARCHAR),
             u.name,
             u.email,
             u.role,
-            tc.body
+            '-------------------------',
+            tc.body,
+            '-------------------------'
         ) AS formatted_comment
     FROM
         TICKET_COMMENT tc
@@ -17,13 +19,13 @@ WITH CommentRank AS (
         USER u ON tc.user_id = u.id
 )
 SELECT
-    t.id AS ticket_id,
-    t.subject AS ticket_subject,
-    t.created_at AS ticket_created_at,
+    t.id as ticket_id,
+    t.subject as ticket_subject,
+    t.created_at as ticket_created_at,
     FORMAT(
-        '\nTicket ID: %d\nCreated On: %s\nSubject: %s\nStatus: %s\nPriority: %s\n\n%s',
+        '\nTicket ID : %d\nCreated On : %s\nSubject : %s\nStatus : %s\nPriority : %s\n\n%s',
         t.id,
-        CAST(t.created_at AS STRING),
+        CAST(t.created_at AS VARCHAR),
         t.subject,
         t.status,
         t.priority,

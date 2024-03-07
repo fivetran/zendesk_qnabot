@@ -1,25 +1,3 @@
-from langchain_community.document_loaders.athena import AthenaLoader
-from langchain_community.vectorstores import Chroma
-from langchain_openai import OpenAIEmbeddings
-
-
-def resync_vector_db():
-    with open('query.sql', 'r') as q:
-        query = q.read()
-
-    docs = AthenaLoader(
-        query=query,
-        database="zendesk",
-        s3_output_uri="s3://asimov-datalake-s3/query_results/",
-        profile_name="datasharing",
-        metadata_columns=["ticket_id", "ticket_subject", "ticket_created_at"]
-    ).load()
-
-    embeddings = OpenAIEmbeddings()
-    vecdb = Chroma.from_documents(docs, embeddings, persist_directory="./db")
-    vecdb.persist()
-
-
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
@@ -37,7 +15,8 @@ llm = ChatOpenAI(model="gpt-4-0125-preview")
 
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
-
+from langchain_community.vectorstores import Chroma
+from langchain_openai import OpenAIEmbeddings
 
 def get_answer(question):
     db = Chroma(persist_directory="./db", embedding_function=OpenAIEmbeddings())
