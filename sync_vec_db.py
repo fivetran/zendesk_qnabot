@@ -13,8 +13,6 @@ docs = AthenaLoader(
     metadata_columns=["ticket_id", "ticket_subject", "ticket_created_at"]
 ).load()
 
-print(docs[0].page_content)
-
 embeddings = OpenAIEmbeddings()
 vecdb = Chroma.from_documents(docs, embeddings, persist_directory="./db")
 vecdb.persist()
