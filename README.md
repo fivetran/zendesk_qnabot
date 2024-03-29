@@ -1,2 +1,2 @@
 # Zendesk Q&A Bot
-Code demonstrated in blogpost {...}
+Code explained in https://www.fivetran.com/blog/building-a-chatbot-with-fivetran-and-langchain
