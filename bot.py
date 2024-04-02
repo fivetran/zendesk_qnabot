@@ -1,6 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
+
 template = """
 You are an assistant tasked with answering questions based on Zendesk chat threads.
 Refer to the following chat threads to provide your response.
@@ -15,15 +16,19 @@ llm = ChatOpenAI(model="gpt-4-0125-preview")
 
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
-from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import Pinecone as PineconeVS
+from pinecone import Pinecone
+import os
+
+pc = Pinecone(api_key=os.environ.get('PINECONE_API_KEY'))
 
 def get_answer(question):
-    db = Chroma(persist_directory="./db", embedding_function=OpenAIEmbeddings())
+    index = pc.Index('zendesk-qna')
+    db = PineconeVS(index, OpenAIEmbeddings(), "ticket_details")
     inputs = {"chat_threads": db.as_retriever(), "question": RunnablePassthrough()}
     rag_chain = (inputs | prompt | llm | StrOutputParser())
     return rag_chain.invoke(question)
-
 
 import streamlit as st
 

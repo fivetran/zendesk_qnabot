@@ -4,5 +4,6 @@ langchain-community
 langchain-openai
 streamlit
 tiktoken
-chromadb
+pinecone-client
+langchain-pinecone
 boto3
