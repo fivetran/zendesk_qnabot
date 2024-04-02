@@ -1,8 +1,8 @@
-openai
+boto3
+chromadb
 langchain
 langchain-community
 langchain-openai
+openai
 streamlit
 tiktoken
-chromadb
-boto3
