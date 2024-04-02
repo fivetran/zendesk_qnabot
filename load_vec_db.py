@@ -21,9 +21,6 @@ pc.create_index(
 while not pc.describe_index(index_name).status['ready']:
     time.sleep(1)
 
-index = pc.Index(index_name)
-index.describe_index_stats()
-
 with open('query.sql', 'r') as q:
     query = q.read()
 
@@ -38,6 +35,7 @@ docs = AthenaLoader(
 
 print("UPLOADING DOCS TO PINECONE")
 embeddings = OpenAIEmbeddings()
+index = pc.Index(index_name)
 for i in range(0, len(docs), 100):
     print(f"Uploading Batch ({i} to {i+100})")
     batch = docs[i:i+100]
