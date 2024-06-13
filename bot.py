@@ -1,5 +1,5 @@
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
+from llama_index.core import PromptTemplate
+from llama_index.llms.openai import OpenAI
 
 template = """
 You are an assistant tasked with answering questions based on Zendesk chat threads.
@@ -10,19 +10,25 @@ Question: {question}
 Chat Threads: {chat_threads}
 Answer:
 """
-prompt = ChatPromptTemplate.from_template(template)
-llm = ChatOpenAI(model="gpt-4-0125-preview")
+prompt = PromptTemplate(template)
+llm = OpenAI(model="gpt-4")
 
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
-from langchain_community.vectorstores import Chroma
-from langchain_openai import OpenAIEmbeddings
+from llama_index.core import VectorStoreIndex
+from pinecone_embeddings import PineconeEmbedding
+from llama_index.vector_stores.pinecone import PineconeVectorStore
+from pinecone import Pinecone
+
+pc = Pinecone()
+index = pc.Index('zendesk-qna')
+vector_store = PineconeVectorStore(pinecone_index=index)
+index = VectorStoreIndex.from_vector_store(vector_store, embed_model=PineconeEmbedding())
+retriever = index.as_retriever()
+
 
 def get_answer(question):
-    db = Chroma(persist_directory="./db", embedding_function=OpenAIEmbeddings())
-    inputs = {"chat_threads": db.as_retriever(), "question": RunnablePassthrough()}
-    rag_chain = (inputs | prompt | llm | StrOutputParser())
-    return rag_chain.invoke(question)
+    chat_threads = [x.get_content() for x in retriever.retrieve(question)]
+    response = llm.complete(prompt.format(question=question, chat_threads=chat_threads))
+    return response.text
 
 
 import streamlit as st
