@@ -11,7 +11,7 @@ Chat Threads: {chat_threads}
 Answer:
 """
 prompt = ChatPromptTemplate.from_template(template)
-llm = ChatOpenAI(model="gpt-4-0125-preview")
+llm = ChatOpenAI(model="gpt-4o")
 
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
@@ -19,11 +19,10 @@ from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
 
 def get_answer(question):
-    db = Chroma(persist_directory="./db", embedding_function=OpenAIEmbeddings())
+    db = Chroma(persist_directory="./db", collection_name="default", embedding_function=OpenAIEmbeddings())
     inputs = {"chat_threads": db.as_retriever(), "question": RunnablePassthrough()}
     rag_chain = (inputs | prompt | llm | StrOutputParser())
     return rag_chain.invoke(question)
-
 
 import streamlit as st
 
