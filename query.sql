@@ -37,3 +37,4 @@ LEFT JOIN
     CommentRank cr ON t.id = cr.ticket_id
 GROUP BY
     t.id, t.subject, t.created_at, t.status, t.priority
+LIMIT 10
