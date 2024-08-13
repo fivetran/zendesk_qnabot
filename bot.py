@@ -78,4 +78,4 @@ with st.form("my_form"):
     question = st.text_area("Enter text:", sample_question)
     submitted = st.form_submit_button("Submit")
     answer = get_answer(question)
-    st.info(answer)
+    st.code(answer)
