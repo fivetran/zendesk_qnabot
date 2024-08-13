@@ -1,8 +1,5 @@
-boto3
-chromadb
-langchain
-langchain-community
-langchain-openai
+snowflake
 openai
 streamlit
-tiktoken
+langchain
+langchain-openai
