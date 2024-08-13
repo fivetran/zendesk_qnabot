@@ -59,8 +59,6 @@ llm = ChatOpenAI(model="gpt-4-0125-preview")
 
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
-from langchain_openai import OpenAIEmbeddings
-
 
 def get_answer(question):
     relevant_docs = get_relevant_docs(question)

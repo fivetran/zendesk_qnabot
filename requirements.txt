@@ -1,5 +1,4 @@
-snowflake
+snowflake-connector-python
 openai
 streamlit
 langchain
-langchain-openai
