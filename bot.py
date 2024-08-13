@@ -10,7 +10,7 @@ def get_embedding(content):
     try:
         return client.embeddings.create(
             input=[content],
-            model="text-embedding-ada-002"
+            model="text-embedding-3-large"
         ).data[0].embedding
     except Exception as e:
       if "maximum context length" in str(e):
@@ -31,7 +31,7 @@ def get_relevant_docs(question: str):
 
         relevant_docs = []
         question_embedding = get_embedding(question)
-        for (document_id, chunk_index, chunk, similarity) in conn.cursor().execute(f"SELECT document_id, chunk_index, chunk, VECTOR_COSINE_SIMILARITY(embedding, {question_embedding}::VECTOR(FLOAT, 1536)) AS similarity FROM demo_pdfs_embedding ORDER BY similarity DESC LIMIT 10"):
+        for (document_id, chunk_index, chunk, similarity) in conn.cursor().execute(f"SELECT document_id, chunk_index, chunk, VECTOR_COSINE_SIMILARITY(embedding, {question_embedding}::VECTOR(FLOAT, 3072)) AS similarity FROM demo_pdfs_embedding ORDER BY similarity DESC LIMIT 10"):
             metadata = {
                 "document_id": document_id,
                 "chunk_index": chunk_index,
