@@ -1,86 +1,76 @@
 import streamlit as st
-from streamlit_chat import message
-from utils import get_tables
-
-if 'messages' not in st.session_state:
-    st.session_state.messages = []
-if 'selected_tools' not in st.session_state:
-    st.session_state.selected_tools = []
-if 'tool_options' not in st.session_state:
-    st.session_state.source_options = {}
-
-st.markdown("""
-<style>
-    .tool-selector {
-        display: flex;
-        align-items: center;
-        border: 1px solid #ddd;
-        padding: 10px;
-        border-radius: 5px;
-        margin-bottom: 10px;
-    }
-    .tool-selector:hover {
-        background-color: #f0f0f0;
-    }
-    .tool-selector img {
-        width: 24px;
-        height: 24px;
-        margin-right: 10px;
-    }
-</style>
-""", unsafe_allow_html=True)
+from langchain.chat_models import ChatOpenAI
+from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
+from langchain.retrievers import MergerRetriever
+from utils import get_collections, get_vector_stores
 
 st.title("Chat by Fivetran")
 
-with st.sidebar:
-    st.header("Sidebar")
+# Initialize session state variables
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
+if 'selected_sources' not in st.session_state:
+    st.session_state.selected_sources = []
+if 'source_options' not in st.session_state:
+    st.session_state.source_options = []
+if 'vector_stores' not in st.session_state:
+    st.session_state.vector_stores = {}
+if 'chain' not in st.session_state:
+    st.session_state.chain = None
 
+with st.sidebar:
     st.subheader("About Me")
     st.write(
-        "This is a chat interface app that allows you to ask questions and get responses. It integrates with Milvus/Zilliz for data processing.")
+        "This is a chat interface app that allows you to ask questions and get responses using RAG with Milvus/Zilliz and OpenAI.")
 
     st.subheader("Configuration")
     milvus_host = st.text_input("Zilliz Host")
-    milvus_token = st.text_input("Zilliz Token")
+    milvus_token = st.text_input("Zilliz Token", type="password")
+    openai_api_key = st.text_input("OpenAI API Key", type="password")
 
     if milvus_host and milvus_token:
-        collections = get_tables(milvus_host, milvus_token)
-        st.session_state.source_options = {
-            collection: f"https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
-            for collection in collections
-        }
+        st.session_state.source_options = get_collections(milvus_host, milvus_token)
+
         st.subheader("Sources")
+        for source in st.session_state.source_options:
+            if st.checkbox(source, key=f"checkbox_{source}"):
+                if source not in st.session_state.selected_sources:
+                    st.session_state.selected_sources.append(source)
+            else:
+                if source in st.session_state.selected_sources:
+                    st.session_state.selected_sources.remove(source)
 
+        if st.session_state.selected_sources and openai_api_key:
+            st.session_state.vector_stores = get_vector_stores(milvus_host, milvus_token,
+                                                               st.session_state.selected_sources, openai_api_key)
 
-    for tool, logo_url in st.session_state.source_options.items():
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            st.markdown(f"""
-                <div class="tool-selector">
-                    <img src="{logo_url}" alt="{tool} logo">
-                    {tool}
-                </div>
-            """, unsafe_allow_html=True)
-        with col2:
-            is_selected = st.checkbox("", key=f"checkbox_{tool}", value=tool in st.session_state.selected_tools)
-            if is_selected and tool not in st.session_state.selected_tools:
-                st.session_state.selected_tools.append(tool)
-            elif not is_selected and tool in st.session_state.selected_tools:
-                st.session_state.selected_tools.remove(tool)
+            llm = ChatOpenAI(temperature=0, openai_api_key=openai_api_key)
+            memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-st.subheader("Chat")
-user_input = st.text_input("Ask a question:")
+            retrievers = [vs.as_retriever(search_kwargs={"k": 2}) for vs in st.session_state.vector_stores.values()]
+            combined_retriever = MergerRetriever(retrievers=retrievers)
 
-def get_response(user_input):
-    # TODO - Here you would implement the logic to process the user input
-    #   and generate a response, potentially using Milvus/Zilliz
-    return f"You said: {user_input}. Selected tools: {', '.join(st.session_state.selected_tools)}"
+            st.session_state.chain = ConversationalRetrievalChain.from_llm(
+                llm=llm,
+                retriever=combined_retriever,
+                memory=memory
+            )
 
-if st.button("Send"):
-    if user_input:
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        response = get_response(user_input)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-for i, msg in enumerate(st.session_state.messages):
-    message(msg["content"], is_user=msg["role"] == "user", key=f"{i}_{msg['role']}")
+if prompt := st.chat_input("What is up?", disabled=not st.session_state.chain):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            response = st.session_state.chain({"question": prompt})
+            st.markdown(response['answer'])
+            st.session_state.messages.append({"role": "assistant", "content": response['answer']})
+
+if not st.session_state.chain:
+    st.warning("Please enter all required information and select at least one source to start the conversation.")
