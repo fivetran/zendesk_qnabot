@@ -6,6 +6,9 @@ from langchain.retrievers import MergerRetriever
 from utils import get_collections, get_vector_stores
 from PIL import Image
 
+DEFAULT_SOURCE_URL = 'https://www.fivetran.com'
+DEFAULT_LOGO_LINK = 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
+
 col1, col2, col3 = st.columns((1, 4, 1))
 with col2:
     st.image(Image.open("chatbot_image.png"))
@@ -30,8 +33,8 @@ with st.sidebar:
         st.subheader("Powered by Zilliz & Fivetran")
 
     st.subheader("About Me")
-    st.write(
-        "This is a chat interface app that allows you to ask questions and get responses using RAG with Milvus/Zilliz and OpenAI.")
+    st.markdown(
+        "This RAG-based chat app, powered by Fivetran, Milvus/Zilliz, and OpenAI, lets you instantly access and chat with your company's data. Simply set up a Fivetran-to-Zilliz data pipeline as outlined [here](www.fivetran.com) and enter your Zilliz account credentials below.")
 
     st.divider()
 
@@ -75,7 +78,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if prompt := st.chat_input("What is up?", disabled=not st.session_state.chain):
+if prompt := st.chat_input("What would you like to know?", disabled=not st.session_state.chain):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -83,7 +86,29 @@ if prompt := st.chat_input("What is up?", disabled=not st.session_state.chain):
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             response = st.session_state.chain({"question": prompt})
-            st.markdown(response['answer'] + "\n\n---\n\nSources: " + " ; ".join([str(doc.metadata['id']) for doc in response['source_documents']]))
+            st.markdown(response['answer'])
+            st.markdown("**Sources:**")
+            source_container = st.container()
+            cols = source_container.columns(10)
+
+            for idx, doc in enumerate(response['source_documents'][:10]):  # Limit to 10 sources
+                doc_url = doc.metadata.get('url', DEFAULT_SOURCE_URL)
+                doc_id = str(doc.metadata['id'])
+                logo_url = doc.metadata.get('logo',DEFAULT_LOGO_LINK)
+
+                with cols[idx]:
+                    st.markdown(
+                        f'<a href="{doc_url}" target="_blank" style="text-decoration: none;">'
+                        f'<button style="border-radius: 10px; padding: 5px 10px; margin: 2px; '
+                        f'font-size: 12px; border: 1px solid #ADD8E6; background-color: transparent; '
+                        f'color: #FFFFFF; cursor: pointer; display: flex; align-items: center; '
+                        f'justify-content: center; width: 100%;">'
+                        f'<img src="{logo_url}" style="width: 16px; height: 16px; margin-right: 5px;">'
+                        f'{doc_id}'
+                        f'</button></a>',
+                        unsafe_allow_html=True
+                    )
+
             st.session_state.messages.append({"role": "assistant", "content": response['answer']})
 
 if not st.session_state.chain:

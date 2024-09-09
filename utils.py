@@ -1,5 +1,5 @@
 from pymilvus import connections, utility, Collection
-from langchain_community.vectorstores import Milvus
+from langchain_milvus import Milvus
 from langchain_openai import OpenAIEmbeddings
 
 

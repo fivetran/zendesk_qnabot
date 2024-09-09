@@ -1,6 +1,6 @@
 langchain
 langchain-openai
-langchain-community
+langchain-milvus
 openai
 streamlit
 streamlit-chat
