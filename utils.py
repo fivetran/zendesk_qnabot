@@ -1,6 +1,6 @@
 from pymilvus import connections, utility, Collection
-from langchain.vectorstores import Milvus
-from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain_community.vectorstores import Milvus
+from langchain_community.embeddings import OpenAIEmbeddings
 
 
 def get_collections(host, token):
@@ -44,7 +44,8 @@ def get_vector_stores(host, token, collection_names, openai_api_key):
             connection_args=connection_args,
             collection_name=collection_name,
             text_field="original_text",
-            vector_field="vector"
+            vector_field="vector",
+            primary_field="id"
         )
 
     return vector_stores
