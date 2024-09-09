@@ -1,6 +1,6 @@
 from pymilvus import connections, utility, Collection
 from langchain_community.vectorstores import Milvus
-from langchain_community.embeddings import OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 
 
 def get_collections(host, token):
