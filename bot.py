@@ -1,8 +1,10 @@
 import streamlit as st
 from langchain_openai import ChatOpenAI
-from langchain.chains import ConversationalRetrievalChain
+from langchain.chains import create_retrieval_chain
 from langchain.memory import ConversationBufferMemory
 from langchain.retrievers import MergerRetriever
+from langchain.prompts import ChatPromptTemplate
+from langchain.chains.combine_documents import create_stuff_documents_chain
 from utils import get_collections, get_vector_stores
 from PIL import Image
 
@@ -67,12 +69,15 @@ with st.sidebar:
             retrievers = [vs.as_retriever(search_kwargs={"k": 2}) for vs in st.session_state.vector_stores.values()]
             combined_retriever = MergerRetriever(retrievers=retrievers)
 
-            st.session_state.chain = ConversationalRetrievalChain.from_llm(
-                llm=llm,
-                retriever=combined_retriever,
-                memory=memory,
-                return_source_documents=True  # This will return source documents in the response
-            )
+            prompt = ChatPromptTemplate.from_template("""Answer the following question based on the context provided:
+
+            Context: {context}
+            Question: {input}
+
+            Answer:""")
+
+            document_chain = create_stuff_documents_chain(llm, prompt)
+            st.session_state.chain = create_retrieval_chain(combined_retriever, document_chain)
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -85,16 +90,16 @@ if prompt := st.chat_input("What would you like to know?", disabled=not st.sessi
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = st.session_state.chain({"question": prompt})
+            response = st.session_state.chain.invoke({"input": prompt})
             st.markdown(response['answer'])
             st.markdown("**Sources:**")
             source_container = st.container()
             cols = source_container.columns(10)
 
-            for idx, doc in enumerate(response['source_documents'][:10]):  # Limit to 10 sources
+            for idx, doc in enumerate(response.get('context', [])[:10]): # Limit to 10 sources
                 doc_url = doc.metadata.get('url', DEFAULT_SOURCE_URL)
                 doc_id = str(doc.metadata['id'])
-                logo_url = doc.metadata.get('logo',DEFAULT_LOGO_LINK)
+                logo_url = doc.metadata.get('logo', DEFAULT_LOGO_LINK)
 
                 with cols[idx]:
                     st.markdown(
