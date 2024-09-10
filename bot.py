@@ -7,9 +7,25 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from utils import get_collections, get_vector_stores
 from PIL import Image
+import re
 
 DEFAULT_SOURCE_URL = 'https://www.fivetran.com'
-DEFAULT_LOGO_LINK = 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
+DEFAULT_LOGO_LINK = 'https://cdn.prod.website-files.com/619c916dd7a3fa284adc0b27/645d855dca64c3fb02d0af96_645036b7282181d60f8eeea8_6400c474201a85cd6a5f6bb9_fivetran-logo.jpeg'
+def infer_source(url, id):
+
+    zendesk_pattern = r'https://[\w-]+\.zendesk\.com/agent/tickets/(\d+)'
+    github_pattern = r'https://github\.com/[\w-]+/[\w-]+/issues/(\d+)'
+
+    zendesk_match = re.match(zendesk_pattern, url)
+    if zendesk_match:
+        return 'https://static-00.iconduck.com/assets.00/zendesk-icon-2048x2048-q18vy4hu.png', zendesk_match.group(1)
+
+    github_match = re.match(github_pattern, url)
+    if github_match:
+        return 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png', github_match.group(1)
+
+    return DEFAULT_LOGO_LINK, id
+
 
 col1, col2, col3 = st.columns((1, 4, 1))
 with col2:
@@ -94,12 +110,12 @@ if prompt := st.chat_input("What would you like to know?", disabled=not st.sessi
             st.markdown(response['answer'])
             st.markdown("**Sources:**")
             source_container = st.container()
-            cols = source_container.columns(10)
+            cols = source_container.columns(5)
 
-            for idx, doc in enumerate(response.get('context', [])[:10]): # Limit to 10 sources
+            for idx, doc in enumerate(response.get('context', [])[:5]): # Limit to 10 sources
                 doc_url = doc.metadata.get('url', DEFAULT_SOURCE_URL)
                 doc_id = str(doc.metadata['id'])
-                logo_url = doc.metadata.get('logo', DEFAULT_LOGO_LINK)
+                logo_url, label = infer_source(doc_url, doc_id)
 
                 with cols[idx]:
                     st.markdown(
@@ -109,7 +125,7 @@ if prompt := st.chat_input("What would you like to know?", disabled=not st.sessi
                         f'color: #FFFFFF; cursor: pointer; display: flex; align-items: center; '
                         f'justify-content: center; width: 100%;">'
                         f'<img src="{logo_url}" style="width: 16px; height: 16px; margin-right: 5px;">'
-                        f'{doc_id}'
+                        f'{label}'
                         f'</button></a>',
                         unsafe_allow_html=True
                     )
