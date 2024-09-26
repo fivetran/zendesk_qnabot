@@ -86,7 +86,7 @@ with st.sidebar:
             llm = ChatOpenAI(temperature=0, openai_api_key=openai_api_key)
             memory = ConversationBufferMemory(memory_key="chat_history", output_key='answer', return_messages=True)
 
-            retrievers = [vs.as_retriever(search_kwargs={"k": 2}) for vs in st.session_state.vector_stores.values()]
+            retrievers = [vs.as_retriever(search_kwargs={"k": 5}) for vs in st.session_state.vector_stores.values()]
             combined_retriever = MergerRetriever(retrievers=retrievers)
 
             prompt = ChatPromptTemplate.from_template("""Answer the following question based on the context provided:
