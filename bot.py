@@ -52,7 +52,7 @@ with st.sidebar:
 
     st.subheader("About Me")
     st.markdown(
-        "This RAG-based chat app, powered by Fivetran, Milvus/Zilliz, and OpenAI, lets you instantly access and chat with your company's data. Simply set up a Fivetran-to-Zilliz data pipeline as outlined [here](www.fivetran.com) and enter your Zilliz account credentials below.")
+        "This RAG-based chat app, powered by Fivetran, Milvus/Zilliz, and OpenAI, lets you instantly access and chat with your company's data. Simply set up a Fivetran-to-Zilliz data pipeline as outlined [here](https://www.fivetran.com/blog/unlock-ai-powered-search-with-fivetran-and-milvus) and enter your Zilliz account credentials below.")
 
     st.divider()
 
