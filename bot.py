@@ -60,6 +60,10 @@ with st.sidebar:
     milvus_host = st.text_input("Zilliz Host")
     milvus_token = st.text_input("Zilliz Token", type="password")
     openai_api_key = st.text_input("OpenAI API Key", type="password")
+    embedding_model = st.selectbox(
+        "Embedding Model",
+        ["text-embedding-3-small", "text-embedding-3-large", "text-embedding-ada-002"]
+    )
 
     st.divider()
 
@@ -77,7 +81,7 @@ with st.sidebar:
 
         if st.session_state.selected_sources and openai_api_key:
             st.session_state.vector_stores = get_vector_stores(milvus_host, milvus_token,
-                                                               st.session_state.selected_sources, openai_api_key)
+                                                               st.session_state.selected_sources, openai_api_key, embedding_model)
 
             llm = ChatOpenAI(temperature=0, openai_api_key=openai_api_key)
             memory = ConversationBufferMemory(memory_key="chat_history", output_key='answer', return_messages=True)

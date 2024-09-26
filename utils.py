@@ -25,7 +25,7 @@ def get_collections(host, token):
     return filtered_collections
 
 
-def get_vector_stores(host, token, collection_names, openai_api_key):
+def get_vector_stores(host, token, collection_names, openai_api_key, embedding_model):
     connection_args = {
         "uri": host,
         "token": token,
@@ -33,7 +33,7 @@ def get_vector_stores(host, token, collection_names, openai_api_key):
     }
 
     embedding_function = OpenAIEmbeddings(
-        model="text-embedding-3-large",
+        model=embedding_model,
         openai_api_key=openai_api_key
     )
 
