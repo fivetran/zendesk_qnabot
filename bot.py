@@ -47,7 +47,7 @@ with st.sidebar:
     col1, col2, col3 = st.columns((1, 7, 1))
     with col2:
         st.title("Chat with your Data!")
-        st.image(Image.open("chatbot_image.png"))
+        st.image(Image.open("fivetran_zilliz.png"))
         st.subheader("Powered by Zilliz & Fivetran")
 
     st.subheader("About Me")
