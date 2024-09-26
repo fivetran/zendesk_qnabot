@@ -2,7 +2,7 @@ import streamlit as st
 from langchain_openai import ChatOpenAI
 from langchain.chains import create_retrieval_chain
 from langchain.memory import ConversationBufferMemory
-from langchain.retrievers import MergerRetriever
+from custom_merger_retriever import MergerRetriever
 from langchain.prompts import ChatPromptTemplate
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from utils import get_collections, get_vector_stores
@@ -37,7 +37,7 @@ if 'messages' not in st.session_state:
 if 'selected_sources' not in st.session_state:
     st.session_state.selected_sources = []
 if 'source_options' not in st.session_state:
-    st.session_state.source_options = []
+    st.session_state.source_options = {}
 if 'vector_stores' not in st.session_state:
     st.session_state.vector_stores = {}
 if 'chain' not in st.session_state:
@@ -71,7 +71,7 @@ with st.sidebar:
         st.session_state.source_options = get_collections(milvus_host, milvus_token)
 
         st.subheader("Sources")
-        for source in st.session_state.source_options:
+        for source in st.session_state.source_options.keys():
             if st.checkbox(source, key=f"checkbox_{source}"):
                 if source not in st.session_state.selected_sources:
                     st.session_state.selected_sources.append(source)
@@ -81,12 +81,12 @@ with st.sidebar:
 
         if st.session_state.selected_sources and openai_api_key:
             st.session_state.vector_stores = get_vector_stores(milvus_host, milvus_token,
-                                                               st.session_state.selected_sources, openai_api_key, embedding_model)
+                                                               st.session_state.selected_sources, st.session_state.source_options, openai_api_key, embedding_model)
 
             llm = ChatOpenAI(temperature=0, openai_api_key=openai_api_key)
             memory = ConversationBufferMemory(memory_key="chat_history", output_key='answer', return_messages=True)
 
-            retrievers = [vs.as_retriever(search_kwargs={"k": 5}) for vs in st.session_state.vector_stores.values()]
+            retrievers = [vs.as_retriever(search_kwargs={"k": 5}, metadata={'primary_field':st.session_state.source_options[vs_name]['primary_field']}) for vs_name, vs in st.session_state.vector_stores.items()]
             combined_retriever = MergerRetriever(retrievers=retrievers)
 
             prompt = ChatPromptTemplate.from_template("""Answer the following question based on the context provided:
@@ -113,12 +113,11 @@ if prompt := st.chat_input("What would you like to know?", disabled=not st.sessi
             response = st.session_state.chain.invoke({"input": prompt})
             st.markdown(response['answer'])
             st.markdown("**Sources:**")
-            source_container = st.container()
-            cols = source_container.columns(5)
+            cols = st.container().columns(5)
 
             for idx, doc in enumerate(response.get('context', [])[:5]): # Limit to 10 sources
                 doc_url = doc.metadata.get('url', DEFAULT_SOURCE_URL)
-                doc_id = str(doc.metadata['id'])
+                doc_id = str(doc.metadata[doc.metadata['__ftchat_primary_field__']])
                 logo_url, label = infer_source(doc_url, doc_id)
 
                 with cols[idx]:
