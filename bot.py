@@ -50,9 +50,16 @@ with st.sidebar:
         st.image(Image.open("fivetran_zilliz.png"))
         st.subheader("Powered by Zilliz & Fivetran")
 
+    st.divider()
+
     st.subheader("About Me")
+
     st.markdown(
-        "This RAG-based chat app, powered by Fivetran, Milvus/Zilliz, and OpenAI, lets you instantly access and chat with your company's data. Simply set up a Fivetran-to-Zilliz data pipeline as outlined [here](https://www.fivetran.com/blog/unlock-ai-powered-search-with-fivetran-and-milvus) and enter your Zilliz account credentials below.")
+        "This RAG-based chat app, powered by Fivetran, Milvus/Zilliz, and OpenAI, allows you to instantly access and interact with your company's data. Simply set up a Fivetran-to-Zilliz data pipeline and enter your Zilliz and OpenAI credentials below.")
+    st.markdown(
+        "For more detailed instructions, check out this [blog](https://www.fivetran.com/blog/unlock-ai-powered-search-with-fivetran-and-milvus) or watch the video below.")
+
+    st.video("https://www.youtube.com/watch?v=xLb_I8KTg4w")
 
     st.divider()
 
