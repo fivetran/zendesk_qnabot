@@ -1,6 +1,7 @@
 langchain
 langchain-community
 snowflake-snowpark-python
+snowflake-connector-python
 streamlit
 streamlit-chat
 tiktoken
