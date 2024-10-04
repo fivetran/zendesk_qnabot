@@ -60,9 +60,8 @@ def _truncate_at_stop_tokens(
 
 class ChatSnowflakeCortex(BaseChatModel):
     session_builder_conf: dict = {}
-
-    model = "llama3.1-8b"
-    cortex_function = "complete"
+    model: str = "llama3.1-8b"
+    cortex_function: str = "complete"
     temperature: float = 0.9
 
     @property
