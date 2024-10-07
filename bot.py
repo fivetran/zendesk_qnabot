@@ -3,7 +3,9 @@ from langchain.chains import create_retrieval_chain
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import ChatPromptTemplate
 from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.retrievers import MergerRetriever
 from PIL import Image
+
 from snowflake.snowpark import Session
 
 import re
@@ -16,8 +18,9 @@ DEFAULT_LOGO_LINK = 'https://cdn.prod.website-files.com/619c916dd7a3fa284adc0b27
 
 
 def infer_source(url, id):
-    zendesk_pattern = r'https://[\w-]+\.zendesk\.com/agent/tickets/(\d+)'
+    zendesk_pattern = r'https://[\w-]+\.zendesk\.com/tickets/(\d+)'
     github_pattern = r'https://github\.com/[\w-]+/[\w-]+/issues/(\d+)'
+    slab_pattern = r'https://[\w-]+\.slab\.com/posts/(\w+)'
 
     zendesk_match = re.match(zendesk_pattern, url)
     if zendesk_match:
@@ -26,6 +29,10 @@ def infer_source(url, id):
     github_match = re.match(github_pattern, url)
     if github_match:
         return 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png', github_match.group(1)
+
+    slab_match = re.match(slab_pattern, url)
+    if slab_match:
+        return 'https://store-images.s-microsoft.com/image/apps.4075.d693ef1e-dbc3-46a3-a42e-74e54a0e6289.dc69f976-b676-48f4-99df-e1781f0e058c.2e1707e2-197a-4b6d-a9c0-6de4008a9d25.png', slab_match.group(1)
 
     return DEFAULT_LOGO_LINK, id
 
@@ -37,6 +44,8 @@ with col2:
 # Initialize session state variables
 if 'messages' not in st.session_state:
     st.session_state.messages = []
+if 'selected_sources' not in st.session_state:
+    st.session_state.selected_sources = []
 if 'chain' not in st.session_state:
     st.session_state.chain = None
 
@@ -64,11 +73,11 @@ with st.sidebar:
     snowflake_schema = st.text_input("Snowflake Schema")
     snowflake_role = st.text_input("Snowflake Role")
     snowflake_warehouse = st.text_input("Snowflake Warehouse")
-    snowflake_cortex_search_service = st.text_input("Snowflake Cortex Search Service")
 
     st.divider()
 
-    if snowflake_host and snowflake_user and snowflake_password and snowflake_database and snowflake_schema and snowflake_role and snowflake_warehouse and snowflake_cortex_search_service:
+    if snowflake_host and snowflake_user and snowflake_password and snowflake_database and snowflake_schema and snowflake_role and snowflake_warehouse:
+
         conff = {
             "account": snowflake_host.removesuffix(".snowflakecomputing.com"),
             "user": snowflake_user,
@@ -78,27 +87,41 @@ with st.sidebar:
             "schema": snowflake_schema,
             "database": snowflake_database,
         }
-        vs = SearchSnowflakeCortex(
-            session_builder_conf=conff,
-            snowflake_database=snowflake_database,
-            snowflake_schema=snowflake_schema,
-            snowflake_cortex_search_service=snowflake_cortex_search_service,
-        )
 
-        llm = ChatSnowflakeCortex(
-            session_builder_conf=conff,
-        )
-        memory = ConversationBufferMemory(memory_key="chat_history", output_key='answer', return_messages=True)
+        search_services = SearchSnowflakeCortex.all_search_services(conff)
 
-        prompt = ChatPromptTemplate.from_template("""Answer the following question based on the context provided:
+        for source in search_services:
+            if st.checkbox(source, key=f"checkbox_{source}"):
+                if source not in st.session_state.selected_sources:
+                    st.session_state.selected_sources.append(source)
+            else:
+                if source in st.session_state.selected_sources:
+                    st.session_state.selected_sources.remove(source)
 
-        Context: {context}
-        Question: {input}
+        if st.session_state.selected_sources:
+            service_retrievers = [SearchSnowflakeCortex(
+                session_builder_conf=conff,
+                snowflake_database=snowflake_database,
+                snowflake_schema=snowflake_schema,
+                snowflake_cortex_search_service=search_service,
+            ).as_retriever(search_kwargs={"k": 5}) for search_service in st.session_state.selected_sources]
 
-        Answer:""")
+            combined_retriever = MergerRetriever(retrievers=service_retrievers)
 
-        document_chain = create_stuff_documents_chain(llm, prompt)
-        st.session_state.chain = create_retrieval_chain(vs.as_retriever(search_kwargs={"k": 5}), document_chain)
+            llm = ChatSnowflakeCortex(
+                session_builder_conf=conff,
+            )
+            memory = ConversationBufferMemory(memory_key="chat_history", output_key='answer', return_messages=True)
+
+            prompt = ChatPromptTemplate.from_template("""Answer the following question based on the context provided:
+    
+            Context: {context}
+            Question: {input}
+    
+            Answer:""")
+
+            document_chain = create_stuff_documents_chain(llm, prompt)
+            st.session_state.chain = create_retrieval_chain(combined_retriever, document_chain)
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -118,7 +141,7 @@ if prompt := st.chat_input("What would you like to know?", disabled=not st.sessi
 
             for idx, doc in enumerate(response.get('context', [])[:5]):  # Limit to 10 sources
                 doc_url = doc.metadata.get('URL', DEFAULT_SOURCE_URL)
-                doc_id = str(doc.metadata['DOCUMENT_ID'])
+                doc_id = str(doc.metadata.get('DOCUMENT_ID', 'UNKNOWN ID'))
                 logo_url, label = infer_source(doc_url, doc_id)
 
                 with cols[idx]:
@@ -137,4 +160,4 @@ if prompt := st.chat_input("What would you like to know?", disabled=not st.sessi
             st.session_state.messages.append({"role": "assistant", "content": response['answer']})
 
 if not st.session_state.chain:
-    st.warning("Please enter all required information to start the conversation.")
+    st.warning("Please enter all required information and select at least one source to start the conversation.")

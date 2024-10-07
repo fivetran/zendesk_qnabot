@@ -23,7 +23,7 @@ class SearchSnowflakeCortex(VectorStore):
         self.snowflake_cortex_search_service: str = snowflake_cortex_search_service
 
     def similarity_search(
-            self, query: str, k: int = 4, **kwargs: Any
+            self, query: str, k: int = 5, **kwargs: Any
     ) -> List[Document]:
         session = Session.builder.configs(self.session_builder_conf).create()
 
@@ -65,3 +65,8 @@ class SearchSnowflakeCortex(VectorStore):
             **kwargs: Any,
     ):
         raise NotImplementedError(f"`from_texts` has not been implemented")
+
+    @staticmethod
+    def all_search_services(session_builder_conf):
+        session = Session.builder.configs(session_builder_conf).create()
+        return [x.name for x in session.sql(f"SHOW CORTEX SEARCH SERVICES").collect()]
