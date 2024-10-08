@@ -1,0 +1,24 @@
+name: Run load_assistant.py
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+
+jobs:
+  run_script:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step to check out the repository
+    - name: Check out repository
+      uses: actions/checkout@v2
+
+    # Step to set up Python 3.12
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.12'  # Using Python 3.12
+
+    # Step to run the Python script
+    - name: Run load_assistant.py
+      run: python load_assistant.py
