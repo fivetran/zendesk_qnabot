@@ -37,7 +37,7 @@ def infer_source(url, id):
 
     sharepoint_match = re.match(sharepoint_pattern, url)
     if sharepoint_match:
-        return 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Microsoft_Office_SharePoint_%282019%E2%80%93present%29.svg/1024px-Microsoft_Office_SharePoint_%282019%E2%80%93present%29.svg.png', sharepoint_match.group(1).split("/")[-1] 
+        return 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Microsoft_Office_SharePoint_%282019%E2%80%93present%29.svg/1024px-Microsoft_Office_SharePoint_%282019%E2%80%93present%29.svg.png', re.search(r'/([^/]+)$', url).group(1) 
 
     return DEFAULT_LOGO_LINK, id
 
