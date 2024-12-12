@@ -21,6 +21,7 @@ def infer_source(url, id):
     zendesk_pattern = r'https://[\w-]+\.zendesk\.com/tickets/(\d+)'
     github_pattern = r'https://github\.com/[\w-]+/[\w-]+/issues/(\d+)'
     slab_pattern = r'https://[\w-]+\.slab\.com/posts/(\w+)'
+    sharepoint_pattern = r'https://[\w-]+\.sharepoint\.com/sites/(\w+)'
 
     zendesk_match = re.match(zendesk_pattern, url)
     if zendesk_match:
@@ -33,6 +34,10 @@ def infer_source(url, id):
     slab_match = re.match(slab_pattern, url)
     if slab_match:
         return 'https://store-images.s-microsoft.com/image/apps.4075.d693ef1e-dbc3-46a3-a42e-74e54a0e6289.dc69f976-b676-48f4-99df-e1781f0e058c.2e1707e2-197a-4b6d-a9c0-6de4008a9d25.png', slab_match.group(1)
+
+    sharepoint_match = re.match(sharepoint_pattern, url)
+    if sharepoint_match:
+        return 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Microsoft_Office_SharePoint_%282019%E2%80%93present%29.svg/1024px-Microsoft_Office_SharePoint_%282019%E2%80%93present%29.svg.png', sharepoint_match.group(1).split("/")[-1] 
 
     return DEFAULT_LOGO_LINK, id
 
