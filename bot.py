@@ -3,8 +3,6 @@ from PIL import Image
 from fivetran_ai import FivetranAI
 import re
 
-
-# ------------------------ Utility Functions ------------------------
 def infer_icon(url) -> str:
     """
     Returns the icon URL based on the matching pattern of the given URL.
@@ -38,7 +36,6 @@ def infer_icon(url) -> str:
 
 
 # ------------------------ Page Layout / Styling ------------------------
-# A small block of CSS to tweak the look and feel
 st.markdown(
     """
     <style>
@@ -50,11 +47,7 @@ st.markdown(
         margin-bottom: 10px;
         background-color: #f7f9fc;
     }
-    /* Style the user prompt input */
-    .stTextArea [data-baseweb="input"] {
-        background-color: #ffffff;
-    }
-    /* Style the side-bar to have a slightly different background */
+    /* Sidebar style */
     section[data-testid="stSidebar"] {
         background-color: #FAFAFA !important;
     }
@@ -83,6 +76,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+
 # ------------------------ Header Section ------------------------
 col1, col2, col3 = st.columns((1, 4, 1))
 with col2:
@@ -104,7 +98,6 @@ with st.sidebar:
         st.subheader("Powered by FivetranAI")
 
     st.divider()
-
     st.subheader("About Me")
     st.markdown(
         "This chat app powered by **FivetranAI** allows you to instantly access and interact with your company's data."
@@ -121,7 +114,6 @@ with st.sidebar:
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        # If it's an assistant message that stored sources, display them
         if message["role"] == "assistant" and "sources" in message:
             if message["sources"]:
                 with st.expander("View Sources"):
@@ -143,38 +135,47 @@ for message in st.session_state.messages:
                             unsafe_allow_html=True
                         )
 
-# ------------------------ Prompt Input & Handling ------------------------
+# ------------------------ Chat Input ------------------------
 prompt = st.chat_input("What would you like to know?", disabled=not st.session_state.token)
 
 if prompt:
-    # 1) Capture user message
+    # User message
     user_message = {"role": "user", "content": prompt}
     st.session_state.messages.append(user_message)
 
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # 2) Get assistant response from your LLM or external API
-    with st.spinner("Thinking..."):
-        response = FivetranAI(st.session_state.token).chat(prompt)
-
-    answer_text = response.get('answer', '')
-    sources = response.get('sources', [])
-
-    # 3) Store the new assistant message (with sources) in session
-    assistant_message = {
-        "role": "assistant",
-        "content": answer_text,
-        "sources": sources
-    }
-    st.session_state.messages.append(assistant_message)
-
-    # 4) Display the newly-added assistant message & sources immediately
+    # Assistant streaming response
     with st.chat_message("assistant"):
-        st.markdown(answer_text)
-        if sources:
+        # 1) Create a placeholder for dynamic loading messages
+
+
+        # 3) We'll collect final answer and sources from streaming events
+        final_answer = ""
+        final_sources = []
+
+        # 4) Stream over events from your custom FivetranAI.chat iterator
+        with st.spinner("FivetranAI is :"):
+            loader_placeholder = st.empty()
+            loader_placeholder.info("Connecting to FivetranAI API...")
+            for msg in FivetranAI(st.session_state.token).chat_stream(prompt):
+                if msg["op"] == "update":
+                    loader_placeholder.info(msg["value"])
+                elif msg["op"] == "answer":
+                    loader_placeholder.empty()
+                    response = msg["value"]
+                    final_answer = response.get('answer', '')
+                    final_sources = response.get("sources", [])
+                    break
+
+        # 5) Display the final answer
+        st.markdown(final_answer)
+
+        # 6) Show sources right away in an expander
+        if final_sources:
             with st.expander("View Sources"):
-                for doc in sources:
+                for doc in final_sources:
                     metadata = doc.get('document', {}).get('metadata', {})
                     doc_url = metadata.get('url', "#")
                     logo_url = infer_icon(doc_url)
@@ -191,6 +192,14 @@ if prompt:
                         """,
                         unsafe_allow_html=True
                     )
+
+    # 7) Also store that final answer & sources in session_state for future
+    assistant_message = {
+        "role": "assistant",
+        "content": final_answer,
+        "sources": final_sources
+    }
+    st.session_state.messages.append(assistant_message)
 
 # ------------------------ If No Token ------------------------
 if not st.session_state.token:

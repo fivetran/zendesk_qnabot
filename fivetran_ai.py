@@ -1,4 +1,5 @@
 import json
+import time
 
 import requests
 import sseclient
@@ -6,29 +7,29 @@ import sseclient
 HOST = "https://fivetranai-api-sgynhqqdzq-uw.a.run.app"
 
 
+def map_event(msg):
+    if not msg.event or msg.event not in ('update', 'answer'):
+        raise ValueError()
+
+    if msg.event == 'update':
+        return {
+            "op": "update",
+            "value": msg.data
+        }
+
+    if msg.event == 'answer':
+        result = json.loads(msg.data)
+        answer = result
+        return {
+            "op": "answer",
+            "value": answer
+        }
+
+
 class FivetranAI:
 
     def __init__(self, token):
         self.token = token
-
-    def chat(self, message: str):
-        url = f"{HOST}/chat"
-
-        payload = {
-            "message": message,
-            "history": []  # TODO replace once implemented
-        }
-        headers = {
-            'Content-Type': 'application/json',
-            "Authorization": f"Bearer {self.token}",
-        }
-
-        response = requests.post(url, headers=headers, json=payload)
-        if response.status_code == 200:
-            result = json.loads(response.text)
-            return result
-        else:
-            raise ValueError(response.text)
 
     def chat_stream(self, message: str):
         url = f"{HOST}/chat_stream"
@@ -44,4 +45,4 @@ class FivetranAI:
         }
         response = requests.post(url=url, headers=headers, json=payload, stream=True)
         client = sseclient.SSEClient(response)
-        return client.events()
+        return map(lambda msg: map_event(msg), client.events())
