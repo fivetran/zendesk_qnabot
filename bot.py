@@ -39,27 +39,27 @@ def infer_icon(url) -> str:
 st.markdown(
     """
     <style>
-    /* Style the main Chat messages */
+    /* Use Streamlit theme variables so that styling adapts to light/dark mode */
+
     .stChatMessage {
-        border: 1px solid #f0f2f6;
+        border: 1px solid var(--block-background-color);
         border-radius: 10px;
         padding: 10px;
         margin-bottom: 10px;
-        background-color: #f7f9fc;
+        background-color: var(--block-background-color) !important;
+        color: var(--text-color) !important;
     }
-    /* Sidebar style */
     section[data-testid="stSidebar"] {
-        background-color: #FAFAFA !important;
+        background-color: var(--sidebar-background-color) !important;
     }
-    /* Custom button styling for source links */
     .source-button {
         border-radius: 10px;
         padding: 5px 10px;
         margin: 5px 0;
         font-size: 12px;
-        border: 1px solid #ADD8E6;
-        background-color: #ffffff;
-        color: #333333;
+        border: 1px solid var(--primary-color);
+        background-color: var(--background-color);
+        color: var(--text-color);
         cursor: pointer;
         display: flex;
         align-items: center;
