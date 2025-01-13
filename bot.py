@@ -1,11 +1,14 @@
 import streamlit as st
 from PIL import Image
 from fivetran_ai import FivetranAI
-
 import re
 
 
+# ------------------------ Utility Functions ------------------------
 def infer_icon(url) -> str:
+    """
+    Returns the icon URL based on the matching pattern of the given URL.
+    """
     source_url_patterns = {
         'zendesk': r'https://[\w-]+\.zendesk\.com/agent/tickets/(\d+)',
         'github': r'https://github\.com/[\w-]+/[\w-]+/issues/(\d+)',
@@ -30,22 +33,72 @@ def infer_icon(url) -> str:
         if re.match(pattern, url):
             return source_to_iconurl[source]
 
+    # Return a default icon if no pattern matches
     return 'https://i.pinimg.com/originals/a1/85/fb/a185fb1e19ce1225d619ba36a0f85b29.png'
 
 
+# ------------------------ Page Layout / Styling ------------------------
+# A small block of CSS to tweak the look and feel
+st.markdown(
+    """
+    <style>
+    /* Style the main Chat messages */
+    .stChatMessage {
+        border: 1px solid #f0f2f6;
+        border-radius: 10px;
+        padding: 10px;
+        margin-bottom: 10px;
+        background-color: #f7f9fc;
+    }
+    /* Style the user prompt input */
+    .stTextArea [data-baseweb="input"] {
+        background-color: #ffffff;
+    }
+    /* Style the side-bar to have a slightly different background */
+    section[data-testid="stSidebar"] {
+        background-color: #FAFAFA !important;
+    }
+    /* Custom button styling for source links */
+    .source-button {
+        border-radius: 10px;
+        padding: 5px 10px;
+        margin: 5px 0;
+        font-size: 12px;
+        border: 1px solid #ADD8E6;
+        background-color: #ffffff;
+        color: #333333;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        width: 100%;
+    }
+    .source-icon {
+        width: 16px;
+        height: 16px;
+        margin-right: 8px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# ------------------------ Header Section ------------------------
 col1, col2, col3 = st.columns((1, 4, 1))
 with col2:
     st.image(Image.open("chatbot_image.png"))
 
-# Initialize session state variables
+# ------------------------ Session State Init ------------------------
 if 'messages' not in st.session_state:
     st.session_state.messages = []
+
 if 'token' not in st.session_state:
     st.session_state.token = None
 
+# ------------------------ Sidebar ------------------------
 with st.sidebar:
-    col1, col2, col3 = st.columns((1, 7, 1))
-    with col2:
+    col1_sb, col2_sb, col3_sb = st.columns((1, 7, 1))
+    with col2_sb:
         st.title("Chat with your Data!")
         st.image(Image.open("fivetran_snowflake.png"))
         st.subheader("Powered by FivetranAI")
@@ -53,53 +106,92 @@ with st.sidebar:
     st.divider()
 
     st.subheader("About Me")
-
     st.markdown(
-        "This chat app powered by FivetranAI allows you to instantly access and interact with your company's data. Simply set up FivetranAI account and enter your API key below.")
-
+        "This chat app powered by **FivetranAI** allows you to instantly access and interact with your company's data."
+        " Simply set up a FivetranAI account and enter your API key below."
+    )
     st.divider()
 
     st.subheader("Configuration")
     token = st.text_input("FivetranAI API Key", placeholder="Your FivetranAI API Key")
-
     if token:
         st.session_state.token = token
 
+# ------------------------ Display Past Messages ------------------------
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        # If it's an assistant message that stored sources, display them
+        if message["role"] == "assistant" and "sources" in message:
+            if message["sources"]:
+                with st.expander("View Sources"):
+                    for doc in message["sources"]:
+                        metadata = doc.get('document', {}).get('metadata', {})
+                        doc_url = metadata.get('url', "#")
+                        logo_url = infer_icon(doc_url)
+                        title = metadata.get("title", "Untitled")
 
-if prompt := st.chat_input("What would you like to know?", disabled=not st.session_state.token):
-    st.session_state.messages.append({"role": "user", "content": prompt})
+                        st.markdown(
+                            f"""
+                            <a href="{doc_url}" target="_blank" style="text-decoration: none;">
+                                <button class="source-button">
+                                    <img src="{logo_url}" class="source-icon"/>
+                                    {title}
+                                </button>
+                            </a>
+                            """,
+                            unsafe_allow_html=True
+                        )
+
+# ------------------------ Prompt Input & Handling ------------------------
+prompt = st.chat_input("What would you like to know?", disabled=not st.session_state.token)
+
+if prompt:
+    # 1) Capture user message
+    user_message = {"role": "user", "content": prompt}
+    st.session_state.messages.append(user_message)
+
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # 2) Get assistant response from your LLM or external API
+    with st.spinner("Thinking..."):
+        response = FivetranAI(st.session_state.token).chat(prompt)
+
+    answer_text = response.get('answer', '')
+    sources = response.get('sources', [])
+
+    # 3) Store the new assistant message (with sources) in session
+    assistant_message = {
+        "role": "assistant",
+        "content": answer_text,
+        "sources": sources
+    }
+    st.session_state.messages.append(assistant_message)
+
+    # 4) Display the newly-added assistant message & sources immediately
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            response = FivetranAI(st.session_state.token).chat(prompt)
-            st.markdown(response['answer'])
-            st.markdown("**Sources:**")
-            cols = st.container().columns(5)
+        st.markdown(answer_text)
+        if sources:
+            with st.expander("View Sources"):
+                for doc in sources:
+                    metadata = doc.get('document', {}).get('metadata', {})
+                    doc_url = metadata.get('url', "#")
+                    logo_url = infer_icon(doc_url)
+                    title = metadata.get("title", "Untitled")
 
-            for idx, doc in enumerate(response.get('sources', [])[:5]):  # Limit to 5 sources
-                metadata = doc.get('document').get('metadata')
-                doc_url = metadata.get('url')
-                logo_url = infer_icon(doc_url)
-
-                with cols[idx]:
                     st.markdown(
-                        f'<a href="{doc_url}" target="_blank" style="text-decoration: none;">'
-                        f'<button style="border-radius: 10px; padding: 5px 10px; margin: 2px; '
-                        f'font-size: 12px; border: 1px solid #ADD8E6; background-color: transparent; '
-                        f'color: #FFFFFF; cursor: pointer; display: flex; align-items: center; '
-                        f'justify-content: center; width: 100%;">'
-                        f'<img src="{logo_url}" style="width: 16px; height: 16px; margin-right: 5px;">'
-                        f'{metadata.get("title")}'
-                        f'</button></a>',
+                        f"""
+                        <a href="{doc_url}" target="_blank" style="text-decoration: none;">
+                            <button class="source-button">
+                                <img src="{logo_url}" class="source-icon"/>
+                                {title}
+                            </button>
+                        </a>
+                        """,
                         unsafe_allow_html=True
                     )
 
-            st.session_state.messages.append({"role": "assistant", "content": response['answer']})
-
+# ------------------------ If No Token ------------------------
 if not st.session_state.token:
-    st.warning("Please enter token to start chatting")
+    st.warning("Please enter your FivetranAI API Key to start chatting")
