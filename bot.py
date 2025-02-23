@@ -1,3 +1,6 @@
+import json
+import time
+
 import streamlit as st
 from PIL import Image
 from fivetran_ai import FivetranAI
@@ -146,54 +149,60 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Assistant streaming response
     with st.chat_message("assistant"):
-        # 1) Create a placeholder for dynamic loading messages
+        # Placeholders
+        status_placeholder = st.empty()
 
+        # 1) Make the expander expanded by default
+        with st.expander("View Sources", expanded=True):
+            sources_placeholder = st.empty()  # For the sources list
 
-        # 3) We'll collect final answer and sources from streaming events
+        # 2) Answer placeholder appears after the sources
+        answer_placeholder = st.empty()
+
         final_answer = ""
         final_sources = []
 
-        # 4) Stream over events from your custom FivetranAI.chat iterator
-        with st.spinner("FivetranAI is :"):
-            loader_placeholder = st.empty()
-            loader_placeholder.info("Connecting to FivetranAI API...")
-            for msg in FivetranAI(st.session_state.token).chat_stream(prompt):
-                if msg["op"] == "update":
-                    loader_placeholder.info(msg["value"])
-                elif msg["op"] == "answer":
-                    loader_placeholder.empty()
-                    response = msg["value"]
-                    final_answer = response.get('answer', '')
-                    final_sources = response.get("sources", [])
-                    break
+        # Initial status
+        status_placeholder.info("FivetranAI is: connecting to API...")
 
-        # 5) Display the final answer
-        st.markdown(final_answer)
-
-        # 6) Show sources right away in an expander
-        if final_sources:
-            with st.expander("View Sources"):
+        # Stream over events from FivetranAI
+        for msg in FivetranAI(st.session_state.token).chat_stream(prompt):
+            if msg["op"] == "api_request_received":
+                print("Handle request received!")
+            elif msg["op"] == "status":
+                status_placeholder.info("FivetranAI is: " + msg["value"])
+            elif msg["op"] == "source":
+                final_sources.append(json.loads(msg["value"]))
+                sources_html = ""
                 for doc in final_sources:
-                    metadata = doc.get('document', {}).get('metadata', {})
-                    doc_url = metadata.get('url', "#")
+                    metadata = doc.get("metadata", {})
+                    doc_url = metadata.get("url", "#")
                     logo_url = infer_icon(doc_url)
                     title = metadata.get("title", "Untitled")
-
-                    st.markdown(
-                        f"""
+                    sources_html += f"""
+                    <div style="margin:0; padding:0;">
                         <a href="{doc_url}" target="_blank" style="text-decoration: none;">
-                            <button class="source-button">
-                                <img src="{logo_url}" class="source-icon"/>
+                            <button class="source-button" style="margin:0; padding:0;">
+                                <img src="{logo_url}" class="source-icon" style="margin:0; padding:0;"/>
                                 {title}
                             </button>
                         </a>
-                        """,
-                        unsafe_allow_html=True
-                    )
+                    </div>
+                    """
+                sources_placeholder.markdown(sources_html, unsafe_allow_html=True)
+            elif msg["op"] == "word":
+                final_answer += msg["value"]
+                answer_placeholder.markdown(final_answer)
+            elif msg["op"] == "labels":
+                print("Handle LABELS!")
+            else:
+                raise ValueError(msg)
 
-    # 7) Also store that final answer & sources in session_state for future
+        # 3) Remove the status message once done
+        status_placeholder.empty()
+
+    # Store final answer and sources in session_state
     assistant_message = {
         "role": "assistant",
         "content": final_answer,
