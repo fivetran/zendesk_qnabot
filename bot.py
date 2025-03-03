@@ -1,10 +1,12 @@
 import json
 import time
+import base64
 
 import streamlit as st
 from PIL import Image
 from fivetran_ai import FivetranAI
 import re
+
 
 def infer_icon(url) -> str:
     """
@@ -78,7 +80,6 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
 
 # ------------------------ Header Section ------------------------
 col1, col2, col3 = st.columns((1, 4, 1))
@@ -168,12 +169,16 @@ if prompt:
 
         # Stream over events from FivetranAI
         for msg in FivetranAI(st.session_state.token).chat_stream(prompt):
+
             if msg["op"] == "api_request_received":
                 print("Handle request received!")
-            elif msg["op"] == "status":
-                status_placeholder.info("FivetranAI is: " + msg["value"])
+                continue
+
+            msg_value = base64.b64decode(msg["value"]).decode('utf-8')
+            if msg["op"] == "status":
+                status_placeholder.info("FivetranAI is: " + msg_value)
             elif msg["op"] == "source":
-                final_sources.append(json.loads(msg["value"]))
+                final_sources.append(json.loads(msg_value))
                 sources_html = ""
                 for doc in final_sources:
                     metadata = doc.get("metadata", {})
@@ -191,9 +196,8 @@ if prompt:
                     </div>
                     """
                 sources_placeholder.markdown(sources_html, unsafe_allow_html=True)
-            elif msg["op"] == "word":
-                final_answer += msg["value"]
-                answer_placeholder.markdown(final_answer)
+            elif msg["op"] == "answer_partial" or msg["op"] == "answer_complete":
+                answer_placeholder.markdown(msg_value)
             elif msg["op"] == "labels":
                 print("Handle LABELS!")
             else:
