@@ -6,7 +6,7 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.retrievers import MergerRetriever
 from PIL import Image
 
-from snowflake.snowpark import Session
+from snowflake.snowpark.context import get_active_session
 from snowflake.core import Root
 
 import re
@@ -76,7 +76,6 @@ def _truncate_at_stop_tokens(
 
 
 class ChatSnowflakeCortex(BaseChatModel):
-    session_builder_conf: dict = {}
     model: str = "llama3.1-8b"
     cortex_function: str = "complete"
     temperature: float = 0.9
@@ -101,15 +100,8 @@ class ChatSnowflakeCortex(BaseChatModel):
                 '{self.model}'
                 ,{message_str},{options_str}) as llm_response;"""
 
-        session = Session.builder.configs(self.session_builder_conf).create()
-        try:
-            l_rows = session.sql(sql_stmt).collect()
-        except Exception as e:
-            raise ChatSnowflakeCortexError(
-                f"Error while making request to Snowflake Cortex via Snowpark: {e}"
-            )
-        finally:
-            session.close()
+        session = get_active_session()
+        l_rows = session.sql(sql_stmt).collect()
 
         response = json.loads(l_rows[0]["LLM_RESPONSE"])
         ai_message_content = response["choices"][0]["messages"]
@@ -127,25 +119,18 @@ class SearchSnowflakeCortex(VectorStore):
 
     def __init__(
             self,
-            session_builder_conf,
-            snowflake_database,
-            snowflake_schema,
             snowflake_cortex_search_service
     ):
-        self.session_builder_conf = session_builder_conf
-        self.snowflake_database: str = snowflake_database
-        self.snowflake_schema: str = snowflake_schema
         self.snowflake_cortex_search_service: str = snowflake_cortex_search_service
 
     def similarity_search(
             self, query: str, k: int = 5, **kwargs: Any
     ) -> List[Document]:
-        session = Session.builder.configs(self.session_builder_conf).create()
-
+        session = get_active_session()
+        database = session.get_current_database()
+        schema = session.get_current_schema()
         root = Root(session)
-        search_service = root.databases[self.snowflake_database].schemas[self.snowflake_schema].cortex_search_services[
-            self.snowflake_cortex_search_service]
-
+        search_service = root.databases[database].schemas[schema].cortex_search_services[self.snowflake_cortex_search_service]
         desc_result = session.sql(f"DESC CORTEX SEARCH SERVICE {self.snowflake_cortex_search_service}").collect()[0]
 
         search_column = desc_result.search_column
@@ -182,9 +167,10 @@ class SearchSnowflakeCortex(VectorStore):
         raise NotImplementedError(f"`from_texts` has not been implemented")
 
     @staticmethod
-    def all_search_services(session_builder_conf):
-        session = Session.builder.configs(session_builder_conf).create()
-        return [x.name for x in session.sql(f"SHOW CORTEX SEARCH SERVICES").collect()]
+    def all_search_services():
+        session = get_active_session()
+        schema = session.get_current_schema()
+        return [x.name for x in session.sql(f"SHOW CORTEX SEARCH SERVICES IN SCHEMA {schema}").collect()]
 
 
 def infer_source(url, id):
@@ -239,64 +225,41 @@ with st.sidebar:
         "This RAG-based chat app, powered by Fivetran and Snowflake Cortex allows you to instantly access and interact with your company's data. Simply set up a Fivetran-to-Snowflake data pipeline and enter your Snowflake credentials below.")
 
     st.divider()
-
-    st.subheader("Configuration")
-    snowflake_host = st.text_input("Snowflake Host", placeholder="your-account.snowflakecomputing.com")
-    snowflake_user = st.text_input("Snowflake Username")
-    snowflake_password = st.text_input("Snowflake Password", type="password")
-    snowflake_database = st.text_input("Snowflake Database")
-    snowflake_schema = st.text_input("Snowflake Schema")
-    snowflake_role = st.text_input("Snowflake Role")
-    snowflake_warehouse = st.text_input("Snowflake Warehouse")
-
-    st.divider()
-
-    if snowflake_host and snowflake_user and snowflake_password and snowflake_database and snowflake_schema and snowflake_role and snowflake_warehouse:
-
-        conff = {
-            "account": snowflake_host.removesuffix(".snowflakecomputing.com"),
-            "user": snowflake_user,
-            "password": snowflake_password,
-            "role": snowflake_role,
-            "warehouse": snowflake_warehouse,
-            "schema": snowflake_schema,
-            "database": snowflake_database,
-        }
-
-        search_services = SearchSnowflakeCortex.all_search_services(conff)
-
-        for source in search_services:
-            if st.checkbox(source, key=f"checkbox_{source}"):
-                if source not in st.session_state.selected_sources:
-                    st.session_state.selected_sources.append(source)
-            else:
-                if source in st.session_state.selected_sources:
-                    st.session_state.selected_sources.remove(source)
-
-        if st.session_state.selected_sources:
-            service_retrievers = [SearchSnowflakeCortex(
-                session_builder_conf=conff,
-                snowflake_database=snowflake_database,
-                snowflake_schema=snowflake_schema,
-                snowflake_cortex_search_service=search_service,
-            ).as_retriever(search_kwargs={"k": 5}) for search_service in st.session_state.selected_sources]
-
-            combined_retriever = MergerRetriever(retrievers=service_retrievers)
-
-            llm = ChatSnowflakeCortex(
-                session_builder_conf=conff,
-            )
-            memory = ConversationBufferMemory(memory_key="chat_history", output_key='answer', return_messages=True)
-
-            prompt = ChatPromptTemplate.from_template("""Answer the following question based on the context provided:
+    st.subheader("Select Sources")
+    database = get_active_session().get_current_database()
+    schema = get_active_session().get_current_schema()
+    search_services = SearchSnowflakeCortex.all_search_services()
     
-            Context: {context}
-            Question: {input}
-    
-            Answer:""")
+    if not search_services:
+        st.warning(f"No search services found. Please create at least one search service in {database}.{schema}.")
 
-            document_chain = create_stuff_documents_chain(llm, prompt)
-            st.session_state.chain = create_retrieval_chain(combined_retriever, document_chain)
+    for source in search_services:
+        if st.checkbox(source, key=f"checkbox_{source}"):
+            if source not in st.session_state.selected_sources:
+                st.session_state.selected_sources.append(source)
+        else:
+            if source in st.session_state.selected_sources:
+                st.session_state.selected_sources.remove(source)
+
+    if st.session_state.selected_sources:
+        service_retrievers = [SearchSnowflakeCortex(
+            snowflake_cortex_search_service=search_service,
+        ).as_retriever(search_kwargs={"k": 5}) for search_service in st.session_state.selected_sources]
+
+        combined_retriever = MergerRetriever(retrievers=service_retrievers)
+
+        llm = ChatSnowflakeCortex()
+        memory = ConversationBufferMemory(memory_key="chat_history", output_key='answer', return_messages=True)
+
+        prompt = ChatPromptTemplate.from_template("""Answer the following question based on the context provided:
+
+        Context: {context}
+        Question: {input}
+
+        Answer:""")
+
+        document_chain = create_stuff_documents_chain(llm, prompt)
+        st.session_state.chain = create_retrieval_chain(combined_retriever, document_chain)
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
