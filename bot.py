@@ -7,14 +7,184 @@ from langchain.retrievers import MergerRetriever
 from PIL import Image
 
 from snowflake.snowpark import Session
+from snowflake.core import Root
 
 import re
+import json
+from typing import Any, Dict, List, Optional
 
-from snowflake_cortex_search import SearchSnowflakeCortex
-from snowflake_cortex_chat import ChatSnowflakeCortex
+from langchain_core.callbacks.manager import CallbackManagerForLLMRun
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    ChatMessage,
+    HumanMessage,
+    SystemMessage,
+)
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.vectorstores.base import VectorStore
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 
 DEFAULT_SOURCE_URL = 'https://www.fivetran.com'
 DEFAULT_LOGO_LINK = 'https://cdn.prod.website-files.com/619c916dd7a3fa284adc0b27/645d855dca64c3fb02d0af96_645036b7282181d60f8eeea8_6400c474201a85cd6a5f6bb9_fivetran-logo.jpeg'
+
+
+SUPPORTED_ROLES: List[str] = [
+    "system",
+    "user",
+    "assistant",
+]
+
+
+class ChatSnowflakeCortexError(Exception):
+    """Error with Snowpark client."""
+
+
+def _convert_message_to_dict(message: BaseMessage) -> dict:
+    message_dict: Dict[str, Any] = {
+        "content": message.content.replace("'", '"'),
+    }
+
+    if isinstance(message, ChatMessage) and message.role in SUPPORTED_ROLES:
+        message_dict["role"] = message.role
+    elif isinstance(message, SystemMessage):
+        message_dict["role"] = "system"
+    elif isinstance(message, HumanMessage):
+        message_dict["role"] = "user"
+    elif isinstance(message, AIMessage):
+        message_dict["role"] = "assistant"
+    else:
+        raise TypeError(f"Got unknown type {message}")
+    return message_dict
+
+
+def _truncate_at_stop_tokens(
+        text: str,
+        stop: Optional[List[str]],
+) -> str:
+    """Truncates text at the earliest stop token found."""
+    if stop is None:
+        return text
+
+    for stop_token in stop:
+        stop_token_idx = text.find(stop_token)
+        if stop_token_idx != -1:
+            text = text[:stop_token_idx]
+    return text
+
+
+class ChatSnowflakeCortex(BaseChatModel):
+    session_builder_conf: dict = {}
+    model: str = "llama3.1-8b"
+    cortex_function: str = "complete"
+    temperature: float = 0.9
+
+    @property
+    def _llm_type(self) -> str:
+        return f"snowflake-cortex-{self.model}"
+
+    def _generate(
+            self,
+            messages: List[BaseMessage],
+            stop: Optional[List[str]] = None,
+            run_manager: Optional[CallbackManagerForLLMRun] = None,
+            **kwargs: Any,
+    ) -> ChatResult:
+        message_dicts = [_convert_message_to_dict(m) for m in messages]
+        message_str = str(message_dicts)
+        options = {"temperature": self.temperature}
+        options_str = str(options)
+        sql_stmt = f"""
+            select snowflake.cortex.{self.cortex_function}(
+                '{self.model}'
+                ,{message_str},{options_str}) as llm_response;"""
+
+        session = Session.builder.configs(self.session_builder_conf).create()
+        try:
+            l_rows = session.sql(sql_stmt).collect()
+        except Exception as e:
+            raise ChatSnowflakeCortexError(
+                f"Error while making request to Snowflake Cortex via Snowpark: {e}"
+            )
+        finally:
+            session.close()
+
+        response = json.loads(l_rows[0]["LLM_RESPONSE"])
+        ai_message_content = response["choices"][0]["messages"]
+
+        content = _truncate_at_stop_tokens(ai_message_content, stop)
+        message = AIMessage(
+            content=content,
+            response_metadata=response["usage"],
+        )
+        generation = ChatGeneration(message=message)
+        return ChatResult(generations=[generation])
+
+
+class SearchSnowflakeCortex(VectorStore):
+
+    def __init__(
+            self,
+            session_builder_conf,
+            snowflake_database,
+            snowflake_schema,
+            snowflake_cortex_search_service
+    ):
+        self.session_builder_conf = session_builder_conf
+        self.snowflake_database: str = snowflake_database
+        self.snowflake_schema: str = snowflake_schema
+        self.snowflake_cortex_search_service: str = snowflake_cortex_search_service
+
+    def similarity_search(
+            self, query: str, k: int = 5, **kwargs: Any
+    ) -> List[Document]:
+        session = Session.builder.configs(self.session_builder_conf).create()
+
+        root = Root(session)
+        search_service = root.databases[self.snowflake_database].schemas[self.snowflake_schema].cortex_search_services[
+            self.snowflake_cortex_search_service]
+
+        desc_result = session.sql(f"DESC CORTEX SEARCH SERVICE {self.snowflake_cortex_search_service}").collect()[0]
+
+        search_column = desc_result.search_column
+        columns = desc_result.columns.split(",")
+
+        search_resp = search_service.search(
+            query=query,
+            columns=columns,
+            limit=k
+        )
+
+        relevant_docs = []
+        for row in search_resp.results:
+            metadata = {
+                col: value
+                for col, value in row.items()
+                if col != search_column
+            }
+            doc = Document(page_content=row[search_column], metadata=metadata)
+            relevant_docs.append(doc)
+
+        session.close()
+
+        return relevant_docs
+
+    @classmethod
+    def from_texts(
+            cls,
+            texts: List[str],
+            embedding: Embeddings,
+            metadatas: Optional[List[dict]] = None,
+            **kwargs: Any,
+    ):
+        raise NotImplementedError(f"`from_texts` has not been implemented")
+
+    @staticmethod
+    def all_search_services(session_builder_conf):
+        session = Session.builder.configs(session_builder_conf).create()
+        return [x.name for x in session.sql(f"SHOW CORTEX SEARCH SERVICES").collect()]
 
 
 def infer_source(url, id):
