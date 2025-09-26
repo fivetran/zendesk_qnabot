@@ -298,4 +298,4 @@ if prompt := st.chat_input("What would you like to know?", disabled=not st.sessi
             st.session_state.messages.append({"role": "assistant", "content": response['answer']})
 
 if not st.session_state.chain:
-    st.warning("Please enter all required information and select at least one source to start the conversation.")
+    st.warning("Please select at least one source to start the conversation.")
